@@ -1,28 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useCart } from "@/context/CartContext"; // Use @/ alias instead of relative path
+import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/context/AuthContext";
 import { ShoppingCart, Menu, X, LogOut, LayoutDashboard } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 export default function Header() {
   const { getTotalItems } = useCart();
+  const { user, logout } = useAuth(); // ✅ استخدم الـ context
   const [isOpen, setIsOpen] = useState(false);
-  const [user, setUser] = useState(null);
-
-  useEffect(() => {
-    const token = localStorage.getItem("authToken");
-    const userData = localStorage.getItem("userData");
-    if (token && userData) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setUser(JSON.parse(userData));
-    }
-  }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("userData");
-    setUser(null);
+    logout();
     setIsOpen(false);
   };
 
@@ -81,7 +71,7 @@ export default function Header() {
               <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
                 {user.firstName}
               </button>
-              <div className="hidden group-hover:block absolute right-0 mt-0 bg-white shadow-lg rounded w-48">
+              <div className="hidden group-hover:block absolute right-0 mt-2 bg-white shadow-lg rounded w-48 z-10">
                 <Link
                   href="/profile"
                   className="block px-4 py-2 hover:bg-gray-100"

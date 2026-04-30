@@ -3,12 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, Lock } from "lucide-react";
+import { Mail, Lock, Loader2 } from "lucide-react"; // ✅ أضف Loader2 اختيارياً
 
 export default function LoginPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(null); // ✅ خليها null بدل string
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -24,7 +24,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
+    setError(null);
     setIsLoading(true);
 
     try {
@@ -39,25 +39,44 @@ export default function LoginPage() {
       if (!response.ok) {
         if (response.status === 403) {
           setError({
-            message: data.error || "Please verify your email address.",
-            isVerificationError: true
+            message:
+              data.error ||
+              "Please verify your email address before logging in.",
+            isVerificationError: true,
           });
         } else {
-          setError({ message: data.error || "Login failed" });
+          setError({
+            message:
+              data.error || "Login failed. Please check your credentials.",
+          });
         }
         return;
       }
 
+      // ✅ Save to localStorage
+      localStorage.setItem("authToken", data.token);
       localStorage.setItem("userData", JSON.stringify(data.user));
+
+      // ✅ Redirect to home
       router.push("/");
     } catch (err) {
-      setError({ message: "Network error. Please try again." });
+      setError({
+        message: "Network error. Please check your connection and try again.",
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleResend = async () => {
+  const handleResendVerification = async () => {
+    if (!formData.email) {
+      setError({
+        message: "Please enter your email address first.",
+        isVerificationError: true,
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
       const response = await fetch("/api/auth/resend-verification", {
@@ -65,14 +84,27 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: formData.email }),
       });
+
       const data = await response.json();
+
       if (response.ok) {
-        setError({ message: "Verification email resent! Check your inbox.", isSuccess: true });
+        setError({
+          message: "✓ Verification email resent! Please check your inbox.",
+          isSuccess: true,
+        });
       } else {
-        setError({ message: data.error || "Failed to resend email." });
+        setError({
+          message:
+            data.error ||
+            "Failed to resend verification email. Please try again later.",
+          isVerificationError: true,
+        });
       }
     } catch (err) {
-      setError({ message: "Network error." });
+      setError({
+        message: "Network error. Please try again.",
+        isVerificationError: true,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -87,16 +119,21 @@ export default function LoginPage() {
         </p>
 
         {error && (
-          <div className={`mb-4 p-4 rounded-lg flex flex-col gap-2 ${
-            error.isSuccess ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-600 border border-red-200"
-          }`}>
+          <div
+            className={`mb-4 p-4 rounded-lg flex flex-col gap-2 ${
+              error.isSuccess
+                ? "bg-green-50 text-green-700 border border-green-200"
+                : "bg-red-50 text-red-600 border border-red-200"
+            }`}
+          >
             <p className="text-sm font-medium">{error.message}</p>
             {error.isVerificationError && (
               <button
-                onClick={handleResend}
-                className="text-xs font-bold underline text-left hover:text-red-800"
+                onClick={handleResendVerification}
+                disabled={isLoading}
+                className="text-xs font-bold underline text-left hover:text-red-800 disabled:opacity-50"
               >
-                Resend Verification Email
+                {isLoading ? "Sending..." : "Resend Verification Email"}
               </button>
             )}
           </div>
@@ -113,7 +150,7 @@ export default function LoginPage() {
                 value={formData.email}
                 onChange={handleChange}
                 required
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
                 placeholder="you@example.com"
               />
             </div>
@@ -129,14 +166,17 @@ export default function LoginPage() {
                 value={formData.password}
                 onChange={handleChange}
                 required
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
                 placeholder="••••••••"
               />
             </div>
           </div>
 
           <div className="flex justify-end">
-            <Link href="#" className="text-sm text-blue-600 font-medium hover:underline">
+            <Link
+              href="/forgot-password"
+              className="text-sm text-blue-600 font-medium hover:underline"
+            >
               Forgot Password?
             </Link>
           </div>
