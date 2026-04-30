@@ -1,269 +1,267 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Package, Store, Mail, Loader2, X, Search, Filter, RefreshCw } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { useRouter } from "next/navigation";
+import { useSellerProducts } from "@/hooks/useSellerProducts";
+import ProductTable from "@/components/seller/ProductTable";
+import ProductForm from "@/components/seller/ProductForm";
+import DeleteConfirmModal from "@/components/seller/DeleteConfirmModal";
+import Toast from "@/components/ui/Toast";
 
 export default function SellerDashboard() {
-  const [user, setUser] = useState(null);
-  const [products, setProducts] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+  
+  const { 
+    products, 
+    loading: productsLoading, 
+    error, 
+    refreshProducts, 
+    addProduct, 
+    updateProduct, 
+    deleteProduct 
+  } = useSellerProducts();
+
   const [categories, setCategories] = useState([]);
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    price: "",
-    discount: "0",
-    category: "",
-    stock: "",
-  });
+  const [showForm, setShowForm] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [deletingName, setDeletingName] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
+  // Redirect if not seller
   useEffect(() => {
-    const userData = localStorage.getItem("userData");
-    if (userData) {
-      setUser(JSON.parse(userData));
+    if (!authLoading && (!user || (user.role !== "seller" && user.role !== "admin"))) {
+      router.push(user ? "/" : "/login");
     }
-  }, []);
+  }, [user, authLoading, router]);
 
+  // Fetch categories
   useEffect(() => {
-    if (!user) return;
-
-    const fetchData = async () => {
+    const fetchCats = async () => {
       try {
-        // Fetch seller's products
-        const response = await fetch(`/api/products?seller=${user._id}`, {
-          credentials: "include",
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setProducts(data.data);
-        }
-
-        // Fetch categories
-        const catResponse = await fetch("/api/categories", {
-          credentials: "include",
-        });
-        if (catResponse.ok) {
-          const catData = await catResponse.json();
-          setCategories(catData.data);
-        }
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setIsLoading(false);
+        const res = await fetch("/api/categories");
+        const data = await res.json();
+        if (res.ok) setCategories(data.data);
+      } catch (err) {
+        console.error("Failed to fetch categories");
       }
     };
+    fetchCats();
+  }, []);
 
-    fetchData();
-  }, [user]);
+  const handleFormSubmit = async (formData) => {
+    let result;
+    if (editingProduct) {
+      result = await updateProduct(editingProduct._id, formData);
+    } else {
+      result = await addProduct(formData);
+    }
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    try {
-      const response = await fetch("/api/products", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          ...formData,
-          seller: user._id,
-          price: parseFloat(formData.price),
-          discount: parseInt(formData.discount),
-          stock: { quantity: parseInt(formData.stock) },
-          images: [{ url: "/placeholder.png" }],
-        }),
-      });
-
-      if (!response.ok) throw new Error("Failed to create product");
-
-      const data = await response.json();
-      setProducts([...products, data.data]);
-      setFormData({
-        title: "",
-        description: "",
-        price: "",
-        discount: "0",
-        category: "",
-        stock: "",
-      });
+    if (result.success) {
+      setToast({ type: "success", message: `Product ${editingProduct ? "updated" : "added"} successfully!` });
       setShowForm(false);
-      alert("Product added successfully!");
-    } catch (error) {
-      alert("Error: " + error.message);
+      setEditingProduct(null);
+    } else {
+      setToast({ type: "error", message: result.error });
     }
   };
 
-  const handleDelete = async (productId) => {
-    if (!confirm("Are you sure?")) return;
-
-    try {
-      const response = await fetch(`/api/products/${productId}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-
-      if (!response.ok) throw new Error("Failed to delete product");
-
-      setProducts(products.filter((p) => p._id !== productId));
-      alert("Product deleted successfully!");
-    } catch (error) {
-      alert("Error: " + error.message);
+  const handleDeleteConfirm = async () => {
+    setIsDeleting(true);
+    const result = await deleteProduct(deletingId);
+    setIsDeleting(false);
+    
+    if (result.success) {
+      setToast({ type: "success", message: "Product deleted successfully" });
+      setDeletingId(null);
+    } else {
+      setToast({ type: "error", message: result.error });
     }
   };
 
-  if (!user || user.role !== "seller") {
-    return (
-      <div className="container mx-auto px-4 py-16 text-center">
-        <p>You must be a seller to access this dashboard</p>
-      </div>
-    );
-  }
+  const filteredProducts = products.filter(p => 
+    p.title.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (authLoading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+      <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
+      <p className="text-gray-500 font-medium">Verifying account permissions...</p>
+    </div>
+  );
+
+  if (!user) return null;
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-8">Seller Dashboard</h1>
+    <div className="min-h-screen bg-gray-50/50 pb-20">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-100 sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+                <Store size={24} />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">{user.storeName || "Seller Dashboard"}</h1>
+                <div className="flex items-center gap-3 mt-0.5">
+                  <span className="flex items-center gap-1 text-xs text-gray-400">
+                    <Mail size={12} /> {user.email}
+                  </span>
+                  <span className="px-2 py-0.5 bg-green-50 text-green-600 text-[10px] font-bold rounded-full uppercase tracking-wider border border-green-100">
+                    {user.role} Account
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            <button
+              onClick={() => {
+                setEditingProduct(null);
+                setShowForm(true);
+              }}
+              className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-500/30"
+            >
+              <Plus size={20} /> Add New Product
+            </button>
+          </div>
+        </div>
+      </div>
 
-      {/* Add Product Button */}
-      <button
-        onClick={() => setShowForm(!showForm)}
-        className="mb-8 flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded hover:bg-blue-700"
-      >
-        <Plus size={20} /> Add New Product
-      </button>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+        {/* Statistics or Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+            <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+              <Package size={24} />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-gray-900">{products.length}</div>
+              <div className="text-xs text-gray-400 font-bold uppercase tracking-tight">Total Products</div>
+            </div>
+          </div>
+          
+          <div className="md:col-span-2 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+            <div className="relative flex-grow">
+              <Search className="absolute left-3 top-3.5 text-gray-400" size={18} />
+              <input 
+                type="text" 
+                placeholder="Search products by title..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <button 
+              onClick={refreshProducts}
+              className="p-3 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition"
+              title="Refresh"
+            >
+              <RefreshCw size={20} className={productsLoading ? "animate-spin" : ""} />
+            </button>
+          </div>
+        </div>
 
-      {/* Add Product Form */}
-      {showForm && (
-        <form
-          onSubmit={handleSubmit}
-          className="bg-white rounded-lg shadow-md p-6 mb-8 grid grid-cols-1 md:grid-cols-2 gap-4"
-        >
-          <input
-            type="text"
-            name="title"
-            value={formData.title}
-            onChange={handleChange}
-            placeholder="Product Title"
-            required
-            className="p-2 border border-gray-300 rounded md:col-span-2"
-          />
-
-          <textarea
-            name="description"
-            value={formData.description}
-            onChange={handleChange}
-            placeholder="Description"
-            required
-            className="p-2 border border-gray-300 rounded md:col-span-2 h-24"
-          />
-
-          <select
-            name="category"
-            value={formData.category}
-            onChange={handleChange}
-            required
-            className="p-2 border border-gray-300 rounded"
-          >
-            <option value="">Select Category</option>
-            {categories.map((cat) => (
-              <option key={cat._id} value={cat._id}>
-                {cat.name}
-              </option>
+        {/* Content Area */}
+        {error ? (
+          <div className="p-12 text-center bg-red-50 rounded-2xl border border-red-100">
+            <XCircle size={48} className="text-red-500 mx-auto mb-4" />
+            <h3 className="text-lg font-bold text-red-700 mb-2">Error loading products</h3>
+            <p className="text-red-600 mb-6">{error}</p>
+            <button 
+              onClick={refreshProducts}
+              className="px-6 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition"
+            >
+              Try Again
+            </button>
+          </div>
+        ) : productsLoading && products.length === 0 ? (
+          <div className="space-y-4">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-24 bg-white rounded-2xl border border-gray-100 animate-pulse" />
             ))}
-          </select>
-
-          <input
-            type="number"
-            name="price"
-            value={formData.price}
-            onChange={handleChange}
-            placeholder="Price"
-            step="0.01"
-            required
-            className="p-2 border border-gray-300 rounded"
+          </div>
+        ) : (
+          <ProductTable 
+            products={filteredProducts} 
+            onEdit={(p) => {
+              setEditingProduct(p);
+              setShowForm(true);
+            }} 
+            onDelete={(id, name) => {
+              setDeletingId(id);
+              setDeletingName(name);
+            }}
           />
+        )}
+      </div>
 
-          <input
-            type="number"
-            name="discount"
-            value={formData.discount}
-            onChange={handleChange}
-            placeholder="Discount %"
-            className="p-2 border border-gray-300 rounded"
-          />
-
-          <input
-            type="number"
-            name="stock"
-            value={formData.stock}
-            onChange={handleChange}
-            placeholder="Stock Quantity"
-            required
-            className="p-2 border border-gray-300 rounded"
-          />
-
-          <button
-            type="submit"
-            className="md:col-span-2 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-          >
-            Add Product
-          </button>
-        </form>
-      )}
-
-      {/* Products Table */}
-      {isLoading ? (
-        <p>Loading products...</p>
-      ) : products.length === 0 ? (
-        <p className="text-gray-600">
-          No products yet. Add your first product!
-        </p>
-      ) : (
-        <div className="bg-white rounded-lg shadow-md overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-100 border-b">
-              <tr>
-                <th className="px-4 py-3 text-left">Title</th>
-                <th className="px-4 py-3 text-left">Price</th>
-                <th className="px-4 py-3 text-left">Stock</th>
-                <th className="px-4 py-3 text-left">Discount</th>
-                <th className="px-4 py-3 text-left">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((product) => (
-                <tr key={product._id} className="border-b hover:bg-gray-50">
-                  <td className="px-4 py-3">{product.title}</td>
-                  <td className="px-4 py-3">${product.price.toFixed(2)}</td>
-                  <td className="px-4 py-3">{product.stock.quantity}</td>
-                  <td className="px-4 py-3">{product.discount}%</td>
-                  <td className="px-4 py-3 flex gap-2">
-                    <button className="text-blue-600 hover:text-blue-700">
-                      <Edit size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(product._id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Product Form Modal */}
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white z-10">
+              <h2 className="text-xl font-bold text-gray-900">
+                {editingProduct ? "Edit Product" : "Add New Product"}
+              </h2>
+              <button onClick={() => setShowForm(false)} className="p-2 text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6">
+              <ProductForm 
+                onSubmit={handleFormSubmit}
+                initialData={editingProduct}
+                categories={categories}
+                onCancel={() => setShowForm(false)}
+              />
+            </div>
+          </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal 
+        isOpen={!!deletingId}
+        onClose={() => setDeletingId(null)}
+        onConfirm={handleDeleteConfirm}
+        productName={deletingName}
+        loading={isDeleting}
+      />
+
+      {/* Toast Notifications */}
+      {toast && (
+        <Toast 
+          message={toast.message} 
+          type={toast.type} 
+          onClose={() => setToast(null)} 
+        />
+      )}
     </div>
+  );
+}
+
+function XCircle({ size, className }) {
+  return (
+    <svg 
+      width={size} 
+      height={size} 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      stroke="currentColor" 
+      strokeWidth="2" 
+      strokeLinecap="round" 
+      strokeLinejoin="round"
+      className={className}
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="m15 9-6 6" />
+      <path d="m9 9 6 6" />
+    </svg>
   );
 }

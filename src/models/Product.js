@@ -44,11 +44,15 @@ const productSchema = new mongoose.Schema(
       type: Number,
       min: [0, "Cost price cannot be negative"],
     },
+    // Discount as an object to support complex logic
     discount: {
-      type: Number,
-      default: 0,
-      min: 0,
-      max: 100,
+      type: {
+        type: String,
+        enum: ["percentage", "fixed"],
+        default: "percentage",
+      },
+      value: { type: Number, default: 0 },
+      active: { type: Boolean, default: false },
     },
     salePrice: {
       type: Number,
@@ -80,7 +84,7 @@ const productSchema = new mongoose.Schema(
           type: String,
           required: true,
         },
-        publicId: String, // For Cloudinary
+        publicId: String,
         alt: String,
         isPrimary: {
           type: Boolean,
@@ -111,12 +115,12 @@ const productSchema = new mongoose.Schema(
     // Variants
     variants: [
       {
-        name: String, // e.g., "Color", "Size"
-        values: [String], // e.g., ["Red", "Blue"], ["S", "M", "L"]
+        name: String,
+        values: [String],
       },
     ],
 
-    // Specifications/Attributes
+    // Specifications
     specifications: mongoose.Schema.Types.Mixed,
 
     // Seller Information
@@ -128,38 +132,8 @@ const productSchema = new mongoose.Schema(
 
     // Ratings & Reviews
     ratings: {
-      average: {
-        type: Number,
-        min: 0,
-        max: 5,
-        default: 0,
-      },
-      count: {
-        type: Number,
-        default: 0,
-      },
-    },
-
-    // Shipping
-    shipping: {
-      weight: Number, // in kg
-      dimensions: {
-        length: Number, // in cm
-        width: Number,
-        height: Number,
-      },
-      shippingClass: String,
-      isShippable: {
-        type: Boolean,
-        default: true,
-      },
-    },
-
-    // SEO
-    seo: {
-      metaTitle: String,
-      metaDescription: String,
-      keywords: [String],
+      average: { type: Number, min: 0, max: 5, default: 0 },
+      count: { type: Number, default: 0 },
     },
 
     // Status & Visibility
@@ -182,30 +156,50 @@ const productSchema = new mongoose.Schema(
     inventoryHistory: [
       {
         quantity: Number,
-        action: String, // 'added', 'sold', 'returned', 'adjusted'
+        action: String,
         reason: String,
-        timestamp: {
-          type: Date,
-          default: Date.now,
-        },
+        timestamp: { type: Date, default: Date.now },
       },
     ],
-
-    // Timestamps
-    createdAt: {
-      type: Date,
-      default: Date.now,
-      index: true,
-    },
-    updatedAt: {
-      type: Date,
-      default: Date.now,
-    },
   },
   {
     timestamps: true,
   },
 );
+
+// Pre-save hook for automatic slug generation and sale price calculation
+productSchema.pre("save", async function () {
+  // Generate slug
+  if (this.isModified("title")) {
+    this.slug = this.title
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .trim();
+  }
+
+  // Calculate salePrice based on discount object
+  if (this.discount?.active && this.discount.value > 0) {
+    if (this.discount.type === "percentage") {
+      this.salePrice = this.price * (1 - this.discount.value / 100);
+    } else {
+      this.salePrice = Math.max(0, this.price - this.discount.value);
+    }
+  } else {
+    this.salePrice = this.price;
+  }
+
+  // Automatic status update
+  if (this.stock.quantity <= 0) {
+    this.status = PRODUCT_STATUS.OUT_OF_STOCK;
+  } else if (
+    this.status === PRODUCT_STATUS.OUT_OF_STOCK &&
+    this.stock.quantity > 0
+  ) {
+    this.status = PRODUCT_STATUS.ACTIVE;
+  }
+});
 
 // Indexes for performance
 productSchema.index({ slug: 1 });
@@ -215,27 +209,12 @@ productSchema.index({ status: 1 });
 productSchema.index({ price: 1 });
 productSchema.index({ title: "text", description: "text", tags: "text" });
 productSchema.index({ createdAt: -1 });
-productSchema.index({ isFeatured: 1, status: 1 });
 
-// Virtual for available stock
+// Virtuals
 productSchema.virtual("availableStock").get(function () {
-  return this.stock.quantity - this.stock.reserved;
+  return this.stock.quantity - (this.stock.reserved || 0);
 });
 
-// Virtual for is low stock
-productSchema.virtual("isLowStock").get(function () {
-  return this.availableStock <= this.stock.lowStockThreshold;
-});
-
-// Calculate sale price before saving
-productSchema.pre("save", function (next) {
-  if (this.discount > 0) {
-    this.salePrice = this.price - (this.price * this.discount) / 100;
-  }
-  next();
-});
-
-// Ensure virtuals are included in JSON
 productSchema.set("toJSON", { virtuals: true });
 
 export default mongoose.models.Product ||

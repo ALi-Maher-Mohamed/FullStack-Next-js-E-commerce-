@@ -69,7 +69,11 @@ export function withRole(...allowedRoles) {
 
       if (!allowedRoles.includes(auth.user.role)) {
         return NextResponse.json(
-          { error: "Forbidden: Insufficient permissions" },
+          {
+            error:
+              "Forbidden: Insufficient permissions. Required role: " +
+              allowedRoles.join(" or "),
+          },
           { status: 403 },
         );
       }

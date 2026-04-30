@@ -16,7 +16,7 @@ export default function ProductCard({ product }) {
   };
 
   const imageUrl = product.images?.[0]?.url || "/placeholder.png";
-  const discount = product.discount || 0;
+  const discount = product.discount?.active ? product.discount.value : 0;
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition">

@@ -4,6 +4,42 @@ import { USER_ROLES } from "@/models/User";
 import { withRole } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
+// ✅ Helper functions
+function getDiscountNumber(discount) {
+  if (!discount) return 0;
+  if (typeof discount === "number") return discount;
+  if (typeof discount === "object") {
+    return discount.active ? discount.value || 0 : 0;
+  }
+  if (typeof discount === "string") return parseInt(discount) || 0;
+  return 0;
+}
+
+function getDiscountObject(discount) {
+  const value = getDiscountNumber(discount);
+  return {
+    type: "percentage",
+    value: value,
+    active: value > 0,
+  };
+}
+
+function getStockQuantity(stock) {
+  if (!stock) return 0;
+  if (typeof stock === "number") return stock;
+  if (typeof stock === "object") return stock.quantity || stock.value || 0;
+  if (typeof stock === "string") return parseInt(stock) || 0;
+  return 0;
+}
+
+function getPriceValue(price) {
+  if (!price) return 0;
+  if (typeof price === "object") return price.value || price.amount || 0;
+  if (typeof price === "number") return price;
+  if (typeof price === "string") return parseFloat(price) || 0;
+  return 0;
+}
+
 /**
  * GET /api/products
  * Get all products with filtering, sorting, and pagination
@@ -24,6 +60,7 @@ export async function GET(request) {
     const maxPrice = searchParams.get("maxPrice");
     const status = searchParams.get("status") || PRODUCT_STATUS.ACTIVE;
     const isFeatured = searchParams.get("isFeatured");
+    const sellerId = searchParams.get("seller");
 
     // Build filter query
     const filter = {
@@ -39,6 +76,11 @@ export async function GET(request) {
     // Category filter
     if (category) {
       filter.category = category;
+    }
+
+    // Seller filter (for seller dashboard)
+    if (sellerId) {
+      filter.seller = sellerId;
     }
 
     // Price range filter
@@ -116,6 +158,10 @@ export const POST = withRole(
     const productData = await request.json();
     const user = request.user;
 
+    // ✅ Log the incoming data for debugging
+    console.log("Creating product for seller:", user.userId);
+    console.log("Product data:", JSON.stringify(productData, null, 2));
+
     // Validation
     if (
       !productData.title ||
@@ -124,34 +170,58 @@ export const POST = withRole(
       !productData.category
     ) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        {
+          error: "Missing required fields: title, description, price, category",
+        },
         { status: 400 },
       );
     }
 
-    // Generate slug
-    const slug = productData.title
+    // Generate slug from title
+    let slug = productData.title
       .toLowerCase()
       .replace(/[^\w\s-]/g, "")
       .replace(/\s+/g, "-")
       .replace(/-+/g, "-")
       .substring(0, 100);
 
-    // Check if slug exists
-    const existingProduct = await Product.findOne({ slug });
-    if (existingProduct) {
-      return NextResponse.json(
-        { error: "Product with this title already exists" },
-        { status: 409 },
-      );
+    // Remove trailing/leading hyphens
+    slug = slug.replace(/^-|-$/g, "");
+
+    // Check if slug exists - if so, add a suffix
+    let existingProduct = await Product.findOne({ slug });
+    let counter = 1;
+    let originalSlug = slug;
+    while (existingProduct) {
+      slug = `${originalSlug}-${counter}`;
+      existingProduct = await Product.findOne({ slug });
+      counter++;
     }
 
-    // Create product
+    // ✅ Create product with discount as OBJECT (matching schema)
     const product = new Product({
-      ...productData,
+      title: productData.title.trim(),
       slug,
-      seller: user.userId, // Set seller from authenticated user
-      stock: productData.stock || { quantity: 0 },
+      description: productData.description.trim(),
+      shortDescription:
+        productData.shortDescription ||
+        productData.description.substring(0, 200),
+      price: getPriceValue(productData.price),
+      discount: getDiscountObject(productData.discount), // ✅ Object, not number
+      category: productData.category,
+      seller: user.userId,
+      stock: {
+        quantity: getStockQuantity(productData.stock),
+        reserved: 0,
+        lowStockThreshold: productData.lowStockThreshold || 10,
+      },
+      images: productData.images || [
+        { url: "/placeholder.png", isPrimary: true },
+      ],
+      tags: productData.tags || [],
+      status: productData.status || PRODUCT_STATUS.ACTIVE,
+      isFeatured: productData.isFeatured || false,
+      visibility: productData.visibility || "public",
     });
 
     await product.save();
@@ -170,6 +240,21 @@ export const POST = withRole(
     );
   } catch (error) {
     console.error("Create product error:", error);
+
+    // ✅ Handle validation errors specially
+    if (error.name === "ValidationError") {
+      const errors = Object.values(error.errors).map((e) => e.message);
+      return NextResponse.json({ error: errors.join(", ") }, { status: 400 });
+    }
+
+    // ✅ Handle duplicate key error (slug)
+    if (error.code === 11000) {
+      return NextResponse.json(
+        { error: "A product with this title already exists" },
+        { status: 409 },
+      );
+    }
+
     return NextResponse.json(
       { error: error.message || "Internal server error" },
       { status: 500 },

@@ -1,7 +1,7 @@
 import dbConnect from "@/lib/dbConnect";
-import Product from "@/models/Product";
+import Product, { PRODUCT_STATUS } from "@/models/Product";
 import { USER_ROLES } from "@/models/User";
-import { withAuth } from "@/lib/auth";
+import { withAuth, withRole } from "@/lib/auth"; // ✅ Add withRole
 import { NextResponse } from "next/server";
 import { isValidObjectId } from "mongoose";
 
@@ -50,7 +50,10 @@ export async function GET(request, { params }) {
  * PUT /api/products/[id]
  * Update a product (Seller/Admin only)
  */
-export const PUT = withAuth(async function (request, { params }) {
+export const PUT = withRole(
+  USER_ROLES.SELLER,
+  USER_ROLES.ADMIN,
+)(async function (request, { params }) {
   try {
     await dbConnect();
 
@@ -83,9 +86,25 @@ export const PUT = withAuth(async function (request, { params }) {
 
     const updateData = await request.json();
 
-    // Don't allow updating slug or seller directly
+    // ✅ Don't allow updating slug, seller, or discount structure directly
     delete updateData.slug;
     delete updateData.seller;
+
+    // ✅ Handle discount if present (convert to proper format)
+    if (updateData.discount) {
+      const discountValue =
+        typeof updateData.discount === "object"
+          ? updateData.discount.active
+            ? updateData.discount.value
+            : 0
+          : Number(updateData.discount) || 0;
+
+      updateData.discount = {
+        type: "percentage",
+        value: discountValue,
+        active: discountValue > 0,
+      };
+    }
 
     const product = await Product.findByIdAndUpdate(id, updateData, {
       new: true,
@@ -104,6 +123,12 @@ export const PUT = withAuth(async function (request, { params }) {
     );
   } catch (error) {
     console.error("Update product error:", error);
+
+    if (error.name === "ValidationError") {
+      const errors = Object.values(error.errors).map((e) => e.message);
+      return NextResponse.json({ error: errors.join(", ") }, { status: 400 });
+    }
+
     return NextResponse.json(
       { error: error.message || "Internal server error" },
       { status: 500 },
@@ -113,9 +138,12 @@ export const PUT = withAuth(async function (request, { params }) {
 
 /**
  * DELETE /api/products/[id]
- * Delete a product (Admin only)
+ * Delete a product (Seller/Admin only - owner or admin)
  */
-export const DELETE = withAuth(async function (request, { params }) {
+export const DELETE = withRole(
+  USER_ROLES.SELLER,
+  USER_ROLES.ADMIN,
+)(async function (request, { params }) {
   try {
     await dbConnect();
 
@@ -135,7 +163,7 @@ export const DELETE = withAuth(async function (request, { params }) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
-    // Admin can delete any product
+    // ✅ Ownership check for sellers (admin can delete any)
     if (
       user.role !== USER_ROLES.ADMIN &&
       productToDelete.seller.toString() !== user.userId
