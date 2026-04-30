@@ -109,7 +109,7 @@ export const PUT = withAuth(async function (request, { params }) {
 
 /**
  * DELETE /api/users/[id]
- * Soft delete user (Admin only)
+ * Hard delete user and their products (Admin only)
  */
 export const DELETE = withRole(USER_ROLES.ADMIN)(async function (
   request,
@@ -119,29 +119,39 @@ export const DELETE = withRole(USER_ROLES.ADMIN)(async function (
     await dbConnect();
 
     const { id } = await params;
+    const currentUser = request.user;
 
     if (!isValidObjectId(id)) {
       return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
     }
 
-    const user = await User.findByIdAndUpdate(
-      id,
-      {
-        isDeleted: true,
-        deletedAt: new Date(),
-        isActive: false,
-      },
-      { new: true },
-    );
+    // Prevent admin from deleting themselves
+    if (currentUser.userId === id) {
+      return NextResponse.json(
+        { error: "Forbidden: You cannot delete your own account" },
+        { status: 400 },
+      );
+    }
 
-    if (!user) {
+    // 1. Check if user exists and get their role
+    const userToDelete = await User.findById(id);
+    if (!userToDelete) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
+
+    // 2. Cascading Delete: If seller, delete all their products
+    if (userToDelete.role === USER_ROLES.SELLER || userToDelete.role === USER_ROLES.ADMIN) {
+      const Product = (await import("@/models/Product")).default;
+      await Product.deleteMany({ seller: id });
+    }
+
+    // 3. Permanently remove user from DB
+    await User.findByIdAndDelete(id);
 
     return NextResponse.json(
       {
         success: true,
-        message: "User deleted successfully",
+        message: "User and all associated products permanently deleted",
       },
       { status: 200 },
     );

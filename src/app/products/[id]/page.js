@@ -143,7 +143,7 @@ export default function ProductDetailPage({ params }) {
                     ${product.price?.toFixed(2)}
                   </span>
                   <span className="text-red-600 font-bold">
-                    Save {product.discount}%
+                    Save {product.discount?.value || 0}%
                   </span>
                 </>
               )}

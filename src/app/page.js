@@ -84,9 +84,9 @@ export default async function Home() {
                       alt={product.title}
                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                     />
-                    {product.discount > 0 && (
+                    {product.discount?.active && product.discount.value > 0 && (
                       <span className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-md">
-                        -{product.discount}%
+                        -{product.discount.value}%
                       </span>
                     )}
                   </Link>

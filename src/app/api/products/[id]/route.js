@@ -163,7 +163,7 @@ export const DELETE = withRole(
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
-    // ✅ Ownership check for sellers (admin can delete any)
+    // Ownership check for sellers (admin can delete any)
     if (
       user.role !== USER_ROLES.ADMIN &&
       productToDelete.seller.toString() !== user.userId
