@@ -11,7 +11,7 @@ export async function POST(request) {
   try {
     await dbConnect();
 
-    const { firstName, lastName, email, phone, password } =
+    const { firstName, lastName, email, phone, password, role } =
       await request.json();
 
     // Validation
@@ -19,6 +19,17 @@ export async function POST(request) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 },
+      );
+    }
+
+    // Role validation: Only customer or seller allowed
+    let assignedRole = USER_ROLES.CUSTOMER;
+    if (role === USER_ROLES.SELLER) {
+      assignedRole = USER_ROLES.SELLER;
+    } else if (role === USER_ROLES.ADMIN) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot register as admin." },
+        { status: 403 },
       );
     }
 
@@ -53,11 +64,11 @@ export async function POST(request) {
       email: email.toLowerCase(),
       phone,
       password: hashedPassword,
-      role: USER_ROLES.CUSTOMER,
+      role: assignedRole,
       authProvider: OAUTH_PROVIDERS.EMAIL,
-      emailVerified: false, // ✅ Not verified yet
-      verificationToken, // ✅ Store token
-      verificationTokenExpiry: tokenExpiry, // ✅ Store expiry
+      emailVerified: false,
+      verificationToken,
+      verificationTokenExpiry: tokenExpiry,
     });
 
     await user.save();
