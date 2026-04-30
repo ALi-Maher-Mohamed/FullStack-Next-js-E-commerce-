@@ -37,8 +37,8 @@ export default function CartPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-user-id": user._id,
         },
+        credentials: "include",
         body: JSON.stringify({
           items: cart.map((item) => ({
             product: item._id,

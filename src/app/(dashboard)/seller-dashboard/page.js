@@ -31,14 +31,18 @@ export default function SellerDashboard() {
     const fetchData = async () => {
       try {
         // Fetch seller's products
-        const response = await fetch(`/api/products?seller=${user._id}`);
+        const response = await fetch(`/api/products?seller=${user._id}`, {
+          credentials: "include",
+        });
         if (response.ok) {
           const data = await response.json();
           setProducts(data.data);
         }
 
         // Fetch categories
-        const catResponse = await fetch("/api/categories");
+        const catResponse = await fetch("/api/categories", {
+          credentials: "include",
+        });
         if (catResponse.ok) {
           const catData = await catResponse.json();
           setCategories(catData.data);
@@ -69,8 +73,8 @@ export default function SellerDashboard() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-user-id": user._id,
         },
+        credentials: "include",
         body: JSON.stringify({
           ...formData,
           seller: user._id,
@@ -106,6 +110,7 @@ export default function SellerDashboard() {
     try {
       const response = await fetch(`/api/products/${productId}`, {
         method: "DELETE",
+        credentials: "include",
       });
 
       if (!response.ok) throw new Error("Failed to delete product");

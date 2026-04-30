@@ -1,5 +1,7 @@
 import dbConnect from "@/lib/dbConnect";
 import Product, { PRODUCT_STATUS } from "@/models/Product";
+import { USER_ROLES } from "@/models/User";
+import { withRole } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 /**
@@ -104,17 +106,15 @@ export async function GET(request) {
  * POST /api/products
  * Create a new product (Seller/Admin only)
  */
-export async function POST(request) {
+export const POST = withRole(
+  USER_ROLES.SELLER,
+  USER_ROLES.ADMIN,
+)(async function (request) {
   try {
     await dbConnect();
 
-    // Get user from request (you'll need to implement authentication middleware)
-    const auth = request.headers.get("authorization");
-    if (!auth) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const productData = await request.json();
+    const user = request.user;
 
     // Validation
     if (
@@ -150,6 +150,7 @@ export async function POST(request) {
     const product = new Product({
       ...productData,
       slug,
+      seller: user.userId, // Set seller from authenticated user
       stock: productData.stock || { quantity: 0 },
     });
 
@@ -174,4 +175,4 @@ export async function POST(request) {
       { status: 500 },
     );
   }
-}
+});

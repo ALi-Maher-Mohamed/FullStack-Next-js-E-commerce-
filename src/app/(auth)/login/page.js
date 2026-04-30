@@ -34,17 +34,45 @@ export default function LoginPage() {
         body: JSON.stringify(formData),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Login failed");
+        if (response.status === 403) {
+          setError({
+            message: data.error || "Please verify your email address.",
+            isVerificationError: true
+          });
+        } else {
+          setError({ message: data.error || "Login failed" });
+        }
+        return;
       }
 
-      const data = await response.json();
-      localStorage.setItem("authToken", data.token);
       localStorage.setItem("userData", JSON.stringify(data.user));
       router.push("/");
     } catch (err) {
-      setError(err.message);
+      setError({ message: "Network error. Please try again." });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: formData.email }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setError({ message: "Verification email resent! Check your inbox.", isSuccess: true });
+      } else {
+        setError({ message: data.error || "Failed to resend email." });
+      }
+    } catch (err) {
+      setError({ message: "Network error." });
     } finally {
       setIsLoading(false);
     }
@@ -59,8 +87,18 @@ export default function LoginPage() {
         </p>
 
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-600 rounded">
-            {error}
+          <div className={`mb-4 p-4 rounded-lg flex flex-col gap-2 ${
+            error.isSuccess ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-600 border border-red-200"
+          }`}>
+            <p className="text-sm font-medium">{error.message}</p>
+            {error.isVerificationError && (
+              <button
+                onClick={handleResend}
+                className="text-xs font-bold underline text-left hover:text-red-800"
+              >
+                Resend Verification Email
+              </button>
+            )}
           </div>
         )}
 
@@ -75,7 +113,7 @@ export default function LoginPage() {
                 value={formData.email}
                 onChange={handleChange}
                 required
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
                 placeholder="you@example.com"
               />
             </div>
@@ -91,14 +129,14 @@ export default function LoginPage() {
                 value={formData.password}
                 onChange={handleChange}
                 required
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
                 placeholder="••••••••"
               />
             </div>
           </div>
 
           <div className="flex justify-end">
-            <Link href="#" className="text-sm text-blue-600 hover:underline">
+            <Link href="#" className="text-sm text-blue-600 font-medium hover:underline">
               Forgot Password?
             </Link>
           </div>
@@ -106,9 +144,9 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700 disabled:opacity-50 transition"
+            className="w-full py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 transition shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2"
           >
-            {isLoading ? "Signing In..." : "Sign In"}
+            {isLoading ? "Please wait..." : "Sign In"}
           </button>
         </form>
 

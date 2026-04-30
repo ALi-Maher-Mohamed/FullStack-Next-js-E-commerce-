@@ -1,5 +1,7 @@
 import dbConnect from "@/lib/dbConnect";
 import Category from "@/models/Category";
+import { USER_ROLES } from "@/models/User";
+import { withRole } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 /**
@@ -34,7 +36,7 @@ export async function GET(request) {
  * POST /api/categories
  * Create new category (Admin only)
  */
-export async function POST(request) {
+export const POST = withRole(USER_ROLES.ADMIN)(async function (request) {
   try {
     await dbConnect();
 
@@ -66,4 +68,4 @@ export async function POST(request) {
       { status: 500 },
     );
   }
-}
+});

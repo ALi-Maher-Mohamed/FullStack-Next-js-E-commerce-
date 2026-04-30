@@ -1,13 +1,13 @@
 import dbConnect from "@/lib/dbConnect";
-import User from "@/models/User";
+import User, { USER_ROLES } from "@/models/User";
+import { withRole } from "@/lib/auth";
 import { NextResponse } from "next/server";
-import { isValidObjectId } from "mongoose";
 
 /**
  * GET /api/users
  * Get all users (Admin only)
  */
-export async function GET(request) {
+export const GET = withRole(USER_ROLES.ADMIN)(async function (request) {
   try {
     await dbConnect();
 
@@ -48,127 +48,4 @@ export async function GET(request) {
       { status: 500 },
     );
   }
-}
-
-/**
- * GET /api/users/[id]
- * Get user profile
- */
-export async function GET_USER(request, { params }) {
-  try {
-    await dbConnect();
-
-    const { id } = params;
-
-    if (!isValidObjectId(id)) {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
-    }
-
-    const user = await User.findById(id).select("-password");
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(
-      {
-        success: true,
-        data: user,
-      },
-      { status: 200 },
-    );
-  } catch (error) {
-    console.error("Get user error:", error);
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 },
-    );
-  }
-}
-
-/**
- * PUT /api/users/[id]
- * Update user
- */
-export async function PUT(request, { params }) {
-  try {
-    await dbConnect();
-
-    const { id } = params;
-    const updateData = await request.json();
-
-    if (!isValidObjectId(id)) {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
-    }
-
-    // Don't allow updating password or email directly
-    delete updateData.password;
-    delete updateData.email;
-
-    const user = await User.findByIdAndUpdate(id, updateData, {
-      new: true,
-      runValidators: true,
-    }).select("-password");
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(
-      {
-        success: true,
-        data: user,
-      },
-      { status: 200 },
-    );
-  } catch (error) {
-    console.error("Update user error:", error);
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 },
-    );
-  }
-}
-
-/**
- * DELETE /api/users/[id]
- * Soft delete user (Admin only)
- */
-export async function DELETE(request, { params }) {
-  try {
-    await dbConnect();
-
-    const { id } = params;
-
-    if (!isValidObjectId(id)) {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
-    }
-
-    const user = await User.findByIdAndUpdate(
-      id,
-      {
-        isDeleted: true,
-        deletedAt: new Date(),
-      },
-      { new: true },
-    );
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(
-      {
-        success: true,
-        message: "User deleted successfully",
-      },
-      { status: 200 },
-    );
-  } catch (error) {
-    console.error("Delete user error:", error);
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 },
-    );
-  }
-}
+});

@@ -1,5 +1,7 @@
 import dbConnect from "@/lib/dbConnect";
 import Order from "@/models/Order";
+import { withAuth, withRole } from "@/lib/auth";
+import { USER_ROLES } from "@/models/User";
 import { NextResponse } from "next/server";
 import { isValidObjectId } from "mongoose";
 
@@ -7,11 +9,12 @@ import { isValidObjectId } from "mongoose";
  * GET /api/orders/[id]
  * Get single order
  */
-export async function GET(request, { params }) {
+export const GET = withAuth(async function (request, { params }) {
   try {
     await dbConnect();
 
-    const { id } = params;
+    const { id } = await params;
+    const user = request.user;
 
     if (!isValidObjectId(id)) {
       return NextResponse.json({ error: "Invalid order ID" }, { status: 400 });
@@ -23,6 +26,17 @@ export async function GET(request, { params }) {
 
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    // Ownership check: Only the user who placed the order or an admin can see it
+    if (
+      user.role !== USER_ROLES.ADMIN &&
+      order.user._id.toString() !== user.userId
+    ) {
+      return NextResponse.json(
+        { error: "Forbidden: You don't have access to this order" },
+        { status: 403 },
+      );
     }
 
     return NextResponse.json(
@@ -39,17 +53,20 @@ export async function GET(request, { params }) {
       { status: 500 },
     );
   }
-}
+});
 
 /**
  * PUT /api/orders/[id]
  * Update order status (Admin only)
  */
-export async function PUT(request, { params }) {
+export const PUT = withRole(USER_ROLES.ADMIN)(async function (
+  request,
+  { params },
+) {
   try {
     await dbConnect();
 
-    const { id } = params;
+    const { id } = await params;
     const { status, comment } = await request.json();
 
     if (!isValidObjectId(id)) {
@@ -84,4 +101,4 @@ export async function PUT(request, { params }) {
       { status: 500 },
     );
   }
-}
+});

@@ -1,5 +1,7 @@
 import dbConnect from "@/lib/dbConnect";
 import Product from "@/models/Product";
+import { USER_ROLES } from "@/models/User";
+import { withAuth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { isValidObjectId } from "mongoose";
 
@@ -11,9 +13,8 @@ export async function GET(request, { params }) {
   try {
     await dbConnect();
 
-    const { id } = params;
+    const { id } = await params;
 
-    // Validate MongoDB ObjectId
     if (!isValidObjectId(id)) {
       return NextResponse.json(
         { error: "Invalid product ID" },
@@ -49,17 +50,34 @@ export async function GET(request, { params }) {
  * PUT /api/products/[id]
  * Update a product (Seller/Admin only)
  */
-export async function PUT(request, { params }) {
+export const PUT = withAuth(async function (request, { params }) {
   try {
     await dbConnect();
 
-    const { id } = params;
+    const { id } = await params;
+    const user = request.user;
 
-    // Validate MongoDB ObjectId
     if (!isValidObjectId(id)) {
       return NextResponse.json(
         { error: "Invalid product ID" },
         { status: 400 },
+      );
+    }
+
+    const productToUpdate = await Product.findById(id);
+
+    if (!productToUpdate) {
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
+
+    // Ownership check
+    if (
+      user.role !== USER_ROLES.ADMIN &&
+      productToUpdate.seller.toString() !== user.userId
+    ) {
+      return NextResponse.json(
+        { error: "Forbidden: You don't own this product" },
+        { status: 403 },
       );
     }
 
@@ -76,10 +94,6 @@ export async function PUT(request, { params }) {
       .populate("seller", "firstName lastName avatar storeName")
       .populate("category", "name slug");
 
-    if (!product) {
-      return NextResponse.json({ error: "Product not found" }, { status: 404 });
-    }
-
     return NextResponse.json(
       {
         success: true,
@@ -95,19 +109,19 @@ export async function PUT(request, { params }) {
       { status: 500 },
     );
   }
-}
+});
 
 /**
  * DELETE /api/products/[id]
  * Delete a product (Admin only)
  */
-export async function DELETE(request, { params }) {
+export const DELETE = withAuth(async function (request, { params }) {
   try {
     await dbConnect();
 
-    const { id } = params;
+    const { id } = await params;
+    const user = request.user;
 
-    // Validate MongoDB ObjectId
     if (!isValidObjectId(id)) {
       return NextResponse.json(
         { error: "Invalid product ID" },
@@ -115,11 +129,24 @@ export async function DELETE(request, { params }) {
       );
     }
 
-    const product = await Product.findByIdAndDelete(id);
+    const productToDelete = await Product.findById(id);
 
-    if (!product) {
+    if (!productToDelete) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
+
+    // Admin can delete any product
+    if (
+      user.role !== USER_ROLES.ADMIN &&
+      productToDelete.seller.toString() !== user.userId
+    ) {
+      return NextResponse.json(
+        { error: "Forbidden: You don't own this product" },
+        { status: 403 },
+      );
+    }
+
+    await Product.findByIdAndDelete(id);
 
     return NextResponse.json(
       {
@@ -135,4 +162,4 @@ export async function DELETE(request, { params }) {
       { status: 500 },
     );
   }
-}
+});

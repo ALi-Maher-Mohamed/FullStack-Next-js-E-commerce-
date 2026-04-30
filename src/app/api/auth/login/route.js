@@ -4,17 +4,12 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
-/**
- * POST /api/auth/login
- * Authenticate user with email and password
- */
 export async function POST(request) {
   try {
     await dbConnect();
 
     const { email, password } = await request.json();
 
-    // Validation
     if (!email || !password) {
       return NextResponse.json(
         { error: "Email and password are required" },
@@ -22,9 +17,9 @@ export async function POST(request) {
       );
     }
 
-    // Find user by email (explicitly select password)
+    // ✅ Select verification fields too
     const user = await User.findOne({ email: email.toLowerCase() }).select(
-      "+password",
+      "+password +verificationToken +verificationTokenExpiry",
     );
 
     if (!user) {
@@ -34,7 +29,17 @@ export async function POST(request) {
       );
     }
 
-    // Check if user is active
+    // ✅ Check if email is verified
+    if (!user.emailVerified) {
+      return NextResponse.json(
+        {
+          error:
+            "Please verify your email address before logging in. Check your inbox for the verification link.",
+        },
+        { status: 403 },
+      );
+    }
+
     if (!user.isActive) {
       return NextResponse.json(
         { error: "User account is inactive" },
@@ -42,7 +47,6 @@ export async function POST(request) {
       );
     }
 
-    // Compare password
     const isPasswordCorrect = await bcrypt.compare(password, user.password);
 
     if (!isPasswordCorrect) {
@@ -52,7 +56,6 @@ export async function POST(request) {
       );
     }
 
-    // Create JWT token
     const token = jwt.sign(
       {
         userId: user._id,
@@ -63,8 +66,12 @@ export async function POST(request) {
       { expiresIn: "7d" },
     );
 
-    // Prepare response
-    const { password: _, ...userWithoutPassword } = user.toObject();
+    const {
+      password: _,
+      verificationToken: __,
+      verificationTokenExpiry: ___,
+      ...userWithoutPassword
+    } = user.toObject();
 
     const response = NextResponse.json(
       {
@@ -75,12 +82,11 @@ export async function POST(request) {
       { status: 200 },
     );
 
-    // Set token in httpOnly cookie for additional security
     response.cookies.set("authToken", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60, // 7 days
+      maxAge: 7 * 24 * 60 * 60,
     });
 
     return response;

@@ -1,25 +1,18 @@
 import dbConnect from "@/lib/dbConnect";
 import User, { USER_ROLES, OAUTH_PROVIDERS } from "@/models/User";
+import VerificationToken from "@/models/VerificationToken"; // ✅ أضف هذا
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import crypto from "crypto"; // ✅ أضف هذا
+import { sendVerificationEmail } from "@/lib/email"; // ✅ أضف هذا
 
-/**
- * POST /api/auth/register
- * Register a new user with email and password
- */
 export async function POST(request) {
   try {
     await dbConnect();
 
-    const {
-      firstName,
-      lastName,
-      email,
-      phone,
-      password,
-      role = USER_ROLES.CUSTOMER,
-    } = await request.json();
+    const { firstName, lastName, email, phone, password } =
+      await request.json();
 
     // Validation
     if (!firstName || !lastName || !email || !password) {
@@ -45,56 +38,60 @@ export async function POST(request) {
       );
     }
 
+    // ✅ Generate verification token
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    const tokenExpiry = new Date();
+    tokenExpiry.setHours(tokenExpiry.getHours() + 24);
+
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user
+    // Create user with verification fields
     const user = new User({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       email: email.toLowerCase(),
       phone,
       password: hashedPassword,
-      role: Object.values(USER_ROLES).includes(role)
-        ? role
-        : USER_ROLES.CUSTOMER,
+      role: USER_ROLES.CUSTOMER,
       authProvider: OAUTH_PROVIDERS.EMAIL,
+      emailVerified: false, // ✅ Not verified yet
+      verificationToken, // ✅ Store token
+      verificationTokenExpiry: tokenExpiry, // ✅ Store expiry
     });
 
     await user.save();
 
-    // Return user without password
-    const { password: _, ...userWithoutPassword } = user.toObject();
+    // ✅ Save verification token in separate collection
+    await VerificationToken.create({
+      userId: user._id,
+      token: verificationToken,
+      expiresAt: tokenExpiry,
+    });
 
-    // Create JWT token
-    const token = jwt.sign(
-      {
-        userId: user._id,
-        email: user.email,
-        role: user.role,
-      },
-      process.env.JWT_SECRET || "your-secret-key",
-      { expiresIn: "7d" },
+    // ✅ Send verification email
+    await sendVerificationEmail(
+      user.email,
+      `${user.firstName} ${user.lastName}`,
+      verificationToken,
     );
 
-    const response = NextResponse.json(
+    // Return user without password
+    const {
+      password: _,
+      verificationToken: __,
+      verificationTokenExpiry: ___,
+      ...userWithoutPassword
+    } = user.toObject();
+
+    return NextResponse.json(
       {
-        message: "User registered successfully",
-        token,
+        message:
+          "Registration successful! Please check your email to verify your account.",
         user: userWithoutPassword,
       },
       { status: 201 },
     );
-
-    // Set token in httpOnly cookie
-    response.cookies.set("authToken", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60, // 7 days
-    });
-
-    return response;
   } catch (error) {
     console.error("Registration error:", error);
     return NextResponse.json(

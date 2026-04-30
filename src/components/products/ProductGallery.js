@@ -31,7 +31,9 @@ export default function ProductGallery({ initialProducts = [] }) {
           ...(maxPrice && { maxPrice }),
         });
 
-        const response = await fetch(`/api/products?${params}`);
+        const response = await fetch(`/api/products?${params}`, {
+          credentials: "include",
+        });
         if (!response.ok) throw new Error("Failed to fetch products");
 
         const data = await response.json();

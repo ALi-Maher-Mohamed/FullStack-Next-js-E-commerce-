@@ -24,14 +24,18 @@ export default function AdminDashboard() {
     const fetchData = async () => {
       try {
         // Fetch all users
-        const usersResponse = await fetch("/api/users");
+        const usersResponse = await fetch("/api/users", {
+          credentials: "include",
+        });
         if (usersResponse.ok) {
           const usersData = await usersResponse.json();
           setUsers(usersData.data);
         }
 
         // Fetch categories
-        const catsResponse = await fetch("/api/categories");
+        const catsResponse = await fetch("/api/categories", {
+          credentials: "include",
+        });
         if (catsResponse.ok) {
           const catsData = await catsResponse.json();
           setCategories(catsData.data);
@@ -52,6 +56,7 @@ export default function AdminDashboard() {
     try {
       const response = await fetch(`/api/users/${userId}`, {
         method: "DELETE",
+        credentials: "include",
       });
 
       if (!response.ok) throw new Error("Failed to delete user");
@@ -70,6 +75,7 @@ export default function AdminDashboard() {
       const response = await fetch("/api/categories", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ name: categoryName }),
       });
 

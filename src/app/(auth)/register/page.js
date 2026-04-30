@@ -56,9 +56,19 @@ export default function RegisterPage() {
       }
 
       const data = await response.json();
-      localStorage.setItem("authToken", data.token);
-      localStorage.setItem("userData", JSON.stringify(data.user));
-      router.push("/");
+      
+      // Clear form on success
+      setFormData({
+        firstName: "",
+        lastName: "",
+        email: "",
+        phone: "",
+        password: "",
+        confirmPassword: "",
+      });
+
+      // Redirect to check-email page
+      router.push(`/check-email?email=${encodeURIComponent(formData.email)}`);
     } catch (err) {
       setError(err.message);
     } finally {

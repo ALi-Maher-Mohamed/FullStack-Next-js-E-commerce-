@@ -17,13 +17,7 @@ export function verifyToken(request) {
 
     // Fall back to cookie
     if (!token) {
-      const cookieHeader = request.headers.get("cookie");
-      if (cookieHeader) {
-        const cookies = Object.fromEntries(
-          cookieHeader.split("; ").map((c) => c.split("=")),
-        );
-        token = cookies.authToken;
-      }
+      token = request.cookies.get("authToken")?.value;
     }
 
     if (!token) {
