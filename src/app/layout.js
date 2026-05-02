@@ -15,15 +15,19 @@ export const metadata = {
   description: "Discover curated premium products with worldwide shipping, secure payments, and 24/7 customer support.",
   keywords: ["e-commerce", "shopping", "premium gadgets", "fashion", "online store"],
   authors: [{ name: "ShopHub Team" }],
-  viewport: "width=device-width, initial-scale=1",
   icons: {
     icon: "/favicon.ico",
   },
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} min-h-screen flex flex-col bg-white text-gray-900`}>
         <AuthProvider>
           <CartProvider>

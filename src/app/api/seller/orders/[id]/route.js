@@ -14,7 +14,7 @@ export const PATCH = withRole(
 )(async function (request, { params }) {
   try {
     await dbConnect();
-    const { id } = params;
+    const { id } = await params;
     const { status, itemId, comment, trackingNumber } = await request.json();
     const sellerId = request.user.userId;
 
