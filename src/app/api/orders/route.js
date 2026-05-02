@@ -85,9 +85,11 @@ export const POST = withAuth(async function (request) {
 
       populatedItems.push({
         product: item.product,
+        seller: product.seller, // Include seller ID from product
         quantity: item.quantity,
         price: price,
         total: itemTotal,
+        status: "pending",
       });
     }
 

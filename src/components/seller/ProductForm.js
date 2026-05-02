@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Package, DollarSign, Tag, Layers, FileText, Save, X, Loader2 } from "lucide-react";
+import { Package, DollarSign, Tag, Layers, FileText, Save, X, Loader2, AlertTriangle } from "lucide-react";
 
 export default function ProductForm({ onSubmit, initialData = null, onCancel, categories = [] }) {
   const [loading, setLoading] = useState(false);
@@ -10,7 +10,7 @@ export default function ProductForm({ onSubmit, initialData = null, onCancel, ca
     description: "",
     price: "",
     category: "",
-    stock: { quantity: 0 },
+    stock: { quantity: 0, lowStockThreshold: 10 },
     discount: { type: "percentage", value: 0, active: false },
     images: [{ url: "/placeholder.png" }],
   });
@@ -22,7 +22,7 @@ export default function ProductForm({ onSubmit, initialData = null, onCancel, ca
         description: initialData.description || "",
         price: initialData.price || "",
         category: initialData.category?._id || initialData.category || "",
-        stock: initialData.stock || { quantity: 0 },
+        stock: initialData.stock || { quantity: 0, lowStockThreshold: 10 },
         discount: initialData.discount || { type: "percentage", value: 0, active: false },
         images: initialData.images || [{ url: "/placeholder.png" }],
       });
@@ -34,6 +34,8 @@ export default function ProductForm({ onSubmit, initialData = null, onCancel, ca
     
     if (name === "quantity") {
       setFormData(prev => ({ ...prev, stock: { ...prev.stock, quantity: parseInt(value) || 0 } }));
+    } else if (name === "lowStockThreshold") {
+      setFormData(prev => ({ ...prev, stock: { ...prev.stock, lowStockThreshold: parseInt(value) || 10 } }));
     } else if (name === "discountValue") {
       const val = parseFloat(value) || 0;
       setFormData(prev => ({ 
@@ -182,6 +184,23 @@ export default function ProductForm({ onSubmit, initialData = null, onCancel, ca
               required
               min="0"
               placeholder="0"
+              className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
+            />
+          </div>
+        </div>
+
+        {/* Low Stock Threshold */}
+        <div>
+          <label className="block text-sm font-bold text-gray-700 mb-1">Low Stock Alert at</label>
+          <div className="relative">
+            <AlertTriangle className="absolute left-3 top-3 text-gray-400" size={18} />
+            <input
+              type="number"
+              name="lowStockThreshold"
+              value={formData.stock.lowStockThreshold}
+              onChange={handleChange}
+              min="0"
+              placeholder="10"
               className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
             />
           </div>

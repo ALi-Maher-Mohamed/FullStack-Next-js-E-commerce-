@@ -202,7 +202,6 @@ productSchema.pre("save", async function () {
 });
 
 // Indexes for performance
-productSchema.index({ slug: 1 });
 productSchema.index({ category: 1 });
 productSchema.index({ seller: 1 });
 productSchema.index({ status: 1 });
